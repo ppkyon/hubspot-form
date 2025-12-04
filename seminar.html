@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Basic Seminar Application</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      max-width: 640px;
+      margin: 2rem auto;
+      padding: 1.5rem;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.3rem;
+    }
+    .version {
+      font-size: 0.8rem;
+      color: #666;
+      margin-bottom: 1rem;
+    }
+    .nav {
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    .nav a {
+      margin-right: 0.5rem;
+    }
+    .field {
+      margin-bottom: 0.8rem;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.2rem;
+    }
+    input[type="text"],
+    input[type="tel"],
+    input[type="email"],
+    textarea {
+      width: 100%;
+      padding: 0.4rem 0.5rem;
+      box-sizing: border-box;
+    }
+    .note {
+      font-size: 0.85rem;
+      color: #555;
+    }
+    .required::after {
+      content: " *";
+      color: #d00;
+    }
+    .messages {
+      margin-bottom: 1rem;
+      white-space: pre-line;
+    }
+    .messages.error {
+      color: #b00020;
+    }
+    .messages.success {
+      color: #006400;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      font-weight: 400;
+    }
+    .checkbox-row input[type="checkbox"] {
+      margin-top: 0.15rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Basic Seminar Application</h1>
+  <div class="version">Ver. Cloudflare + GAS API</div>
+
+  <div class="nav">
+    <a href="register.html">Visitor Registration</a>
+    <a href="seminar.html">Basic Seminar Application</a>
+  </div>
+
+  <div id="messages" class="messages"></div>
+
+  <form id="seminarForm">
+    <div class="field">
+      <label>Management ID</label>
+      <input type="text" name="managementId" />
+    </div>
+
+    <div class="field">
+      <label>Full Name</label>
+      <input type="text" name="fullName" />
+    </div>
+
+    <div class="field">
+      <label class="required">Email</label>
+      <input type="email" name="email" />
+    </div>
+
+    <div class="field">
+      <label class="required">Preferred Schedule</label>
+      <input
+        type="text"
+        name="schedule"
+        placeholder="e.g. 2025-01-10 10:00 AM"
+      />
+    </div>
+
+    <div class="field">
+      <label>Memo</label>
+      <textarea name="memo" rows="3"></textarea>
+    </div>
+
+    <!-- ★ 住所（最初は隠す） -->
+    <div class="field" id="seminar-address-field" style="display: none;">
+      <label class="required">Address (US format)</label>
+      <input type="text" name="address" />
+      <div class="note">
+        If your address is not yet registered, please enter it here.
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="required">Consent for Seminar</label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="seminarConsent" />
+        <span>
+          I understand and agree with the terms and conditions for attending the
+          seminar.
+        </span>
+      </label>
+    </div>
+
+    <button type="submit">Submit</button>
+  </form>
+
+  <script>
+    // ★ ここに実際の GAS Webアプリ URL（/exec まで）を入れる
+    const GAS_ENDPOINT = 'https://script.google.com/macros/s/XXXXXXXXXXXXXXXXXXXX/exec';
+
+    function setMessage(msg, isError) {
+      const box = document.getElementById('messages');
+      if (!box) return;
+      box.textContent = msg || '';
+      box.className = 'messages ' + (isError ? 'error' : (msg ? 'success' : ''));
+    }
+
+    const semForm = document.getElementById('seminarForm');
+    const addressFieldWrapper = document.getElementById('seminar-address-field');
+    let seminarAddressRequired = false;
+
+    function setSeminarAddressRequired(required) {
+      seminarAddressRequired = !!required;
+      if (!addressFieldWrapper) return;
+      addressFieldWrapper.style.display = required ? 'block' : 'none';
+      if (!required && semForm.address) {
+        semForm.address.value = '';
+      }
+    }
+
+    // Management ID / Full Name / Email から住所有無をチェック
+    async function lookupSeminarPerson() {
+      const payload = {
+        managementId: semForm.managementId.value.trim(),
+        fullName: semForm.fullName.value.trim(),
+        email: semForm.email.value.trim()
+      };
+
+      // 全部空なら非表示
+      if (!payload.managementId && !payload.fullName && !payload.email) {
+        setSeminarAddressRequired(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(GAS_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'lookupSeminarForAddress',
+            payload: payload
+          })
+        });
+
+        const json = await res.json();
+
+        // 見つからない or hasAddress=false → 住所必須
+        if (!json || !json.ok || !json.found || !json.hasAddress) {
+          setSeminarAddressRequired(true);
+        } else {
+          setSeminarAddressRequired(false);
+        }
+      } catch (err) {
+        console.error('lookupSeminarForAddress error:', err);
+        // エラー時は安全側で必須にはしない
+        setSeminarAddressRequired(false);
+      }
+    }
+
+    if (semForm) {
+      // blur で lookup 発火
+      ['managementId', 'fullName', 'email'].forEach(function (name) {
+        if (semForm[name]) {
+          semForm[name].addEventListener('blur', lookupSeminarPerson);
+        }
+      });
+
+      // submit
+      semForm.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        setMessage('Sending...', false);
+
+        const payload = {
+          managementId: semForm.managementId.value.trim(),
+          fullName: semForm.fullName.value.trim(),
+          email: semForm.email.value.trim(),
+          schedule: semForm.schedule.value.trim(),
+          memo: semForm.memo.value.trim(),
+          seminarConsent: semForm.seminarConsent.checked,
+          address: semForm.address ? semForm.address.value.trim() : '',
+          addressRequired: seminarAddressRequired
+        };
+
+        // フロント側チェック
+        if (!payload.email) {
+          setMessage('Email is required.', true);
+          return;
+        }
+        if (!payload.schedule) {
+          setMessage('Schedule is required.', true);
+          return;
+        }
+        if (!payload.seminarConsent) {
+          setMessage('Consent is required.', true);
+          return;
+        }
+        if (seminarAddressRequired && !payload.address) {
+          setMessage('Address is required.', true);
+          return;
+        }
+
+        try {
+          const res = await fetch(GAS_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'submitSeminar',
+              payload: payload
+            })
+          });
+
+          const json = await res.json();
+
+          if (!json || typeof json.ok === 'undefined') {
+            setMessage('Unexpected response from server.', true);
+            return;
+          }
+
+          if (!json.ok) {
+            setMessage(json.errorMessage || 'Error occurred.', true);
+            return;
+          }
+
+          setSeminarAddressRequired(false);
+          setMessage(
+            json.message ||
+              'Application submitted. Application ID: ' + (json.applyId || ''),
+            false
+          );
+          semForm.reset();
+        } catch (err) {
+          console.error(err);
+          setMessage('Server error: ' + err, true);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
