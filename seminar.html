@@ -181,7 +181,7 @@
       }
 
       try {
-        const res = await fetch(GAS_ENDPOINT, {
+        const res = await fetch("/api/seminar", {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
