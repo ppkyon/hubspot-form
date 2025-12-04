@@ -1,0 +1,225 @@
+<!-- register.html: Visitor Registration フォーム（Cloudflare Pages 用） -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Visitor Registration</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      max-width: 640px;
+      margin: 2rem auto;
+      padding: 1.5rem;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.3rem;
+    }
+    .version {
+      font-size: 0.8rem;
+      color: #666;
+      margin-bottom: 1rem;
+    }
+    .nav {
+      margin-bottom: 1rem;
+      font-size: 0.9rem;
+    }
+    .nav a {
+      margin-right: 0.5rem;
+    }
+    .field {
+      margin-bottom: 0.8rem;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.2rem;
+    }
+    input[type="text"],
+    input[type="tel"],
+    input[type="email"],
+    input[type="date"],
+    textarea {
+      width: 100%;
+      padding: 0.4rem 0.5rem;
+      box-sizing: border-box;
+    }
+    .note {
+      font-size: 0.85rem;
+      color: #555;
+    }
+    .required::after {
+      content: " *";
+      color: #d00;
+    }
+    .messages {
+      margin-bottom: 1rem;
+      white-space: pre-line;
+    }
+    .messages.error {
+      color: #b00020;
+    }
+    .messages.success {
+      color: #006400;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      font-weight: 400;
+    }
+    .checkbox-row input[type="checkbox"] {
+      margin-top: 0.15rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Visitor Registration</h1>
+  <div class="version">Ver. Cloudflare + GAS API</div>
+
+  <div class="nav">
+    <a href="register.html">Visitor Registration</a>
+    <a href="seminar.html">Basic Seminar Application</a>
+  </div>
+
+  <div id="messages" class="messages"></div>
+
+  <form id="registerForm">
+    <p class="note">Please fill in the form below. Items with * are required.</p>
+
+    <div class="field">
+      <label class="required">First Name</label>
+      <input type="text" name="firstName" />
+    </div>
+
+    <div class="field">
+      <label class="required">Last Name</label>
+      <input type="text" name="lastName" />
+    </div>
+
+    <div class="field">
+      <label>Middle Name</label>
+      <input type="text" name="middleName" />
+    </div>
+
+    <div class="field">
+      <label class="required">Phone</label>
+      <input type="tel" name="phone" placeholder="+1 xxx-xxx-xxxx" />
+    </div>
+
+    <div class="field">
+      <label>Address (US format)</label>
+      <input type="text" name="address" />
+      <div class="note">
+        Optional at first visit. It may be required when applying for a seminar.
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="required">Birthday (YYYY-MM-DD)</label>
+      <input type="date" name="birthday" />
+    </div>
+
+    <div class="field">
+      <label class="required">Email</label>
+      <input type="email" name="email" />
+    </div>
+
+    <div class="field">
+      <label>Referral Source</label>
+      <input type="text" name="referral" />
+    </div>
+
+    <div class="field">
+      <label>Interest</label>
+      <textarea name="interest" rows="2"></textarea>
+    </div>
+
+    <div class="field">
+      <label class="required">Consent</label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="consent" />
+        <span>
+          I have read and agree to the privacy policy and the use of my personal data as described.
+        </span>
+      </label>
+    </div>
+
+    <div class="field">
+      <label>Notes</label>
+      <textarea name="notes" rows="3"></textarea>
+    </div>
+
+    <button type="submit">Submit</button>
+  </form>
+
+  <script>
+    // ★ ここに実際の GAS Webアプリ URL（/exec まで）を入れる
+    const GAS_ENDPOINT = 'https://script.google.com/macros/s/XXXXXXXXXXXXXXXXXXXX/exec';
+
+    function setMessage(msg, isError) {
+      const box = document.getElementById('messages');
+      if (!box) return;
+      box.textContent = msg || '';
+      box.className = 'messages ' + (isError ? 'error' : (msg ? 'success' : ''));
+    }
+
+    const regForm = document.getElementById('registerForm');
+
+    if (regForm) {
+      regForm.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        setMessage('Sending...', false);
+
+        const payload = {
+          firstName: regForm.firstName.value.trim(),
+          lastName: regForm.lastName.value.trim(),
+          middleName: regForm.middleName.value.trim(),
+          phone: regForm.phone.value.trim(),
+          address: regForm.address.value.trim(),
+          birthday: regForm.birthday.value,
+          email: regForm.email.value.trim(),
+          referral: regForm.referral.value.trim(),
+          interest: regForm.interest.value.trim(),
+          consent: regForm.consent.checked,
+          notes: regForm.notes.value.trim()
+        };
+
+        try {
+          const res = await fetch(GAS_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'submitRegister',
+              payload: payload
+            })
+          });
+
+          const json = await res.json();
+
+          if (!json.ok) {
+            setMessage(json.errorMessage || 'Error occurred.', true);
+            return;
+          }
+
+          setMessage(
+            'Registration completed. Management ID: ' + (json.managementId || ''),
+            false
+          );
+          regForm.reset();
+        } catch (err) {
+          console.error(err);
+          setMessage('Server error: ' + err, true);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
